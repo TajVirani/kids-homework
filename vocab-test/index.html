@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vocab Test</title>
+    <title>Vocabulary Matching Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
         * {
             margin: 0;
@@ -61,17 +62,575 @@
             color: #666;
             font-size: 1.2rem;
         }
+
+        /* Celebration overlay */
+        #celebrationOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 9999;
+            overflow: hidden;
+            display: none;
+        }
+
+        #celebrationOverlay.active {
+            display: block;
+        }
+
+        /* Night sky background overlay */
+        #nightOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom, #0a0a1a 0%, #1a1a3a 50%, #2a2a4a 100%);
+            z-index: 9998;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 1s ease-in-out;
+        }
+
+        #nightOverlay.active {
+            opacity: 1;
+        }
+
+        #nightOverlay.fade-out {
+            opacity: 0;
+        }
+
+        /* Stars in the night sky */
+        .star {
+            position: absolute;
+            background: white;
+            border-radius: 50%;
+            animation: twinkle 1.5s ease-in-out infinite alternate;
+        }
+
+        @keyframes twinkle {
+            0% { opacity: 0.3; }
+            100% { opacity: 1; }
+        }
+
+        .firework-particle {
+            position: absolute;
+            border-radius: 50%;
+            pointer-events: none;
+        }
+
+        .cat-particle {
+            position: absolute;
+            font-size: 24px;
+            pointer-events: none;
+        }
+
+        #yayText {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            font-size: 120px;
+            font-weight: bold;
+            color: #ff1493;
+            text-shadow:
+                0 0 20px #ff69b4,
+                0 0 40px #ff1493,
+                0 0 60px #ff69b4,
+                4px 4px 0 #ffd700,
+                -4px -4px 0 #00bfff;
+            z-index: 10000;
+            pointer-events: none;
+            opacity: 0;
+            animation: none;
+        }
+
+        #yayText.show {
+            animation: yayPop 0.5s ease-out forwards, yayPulse 0.5s ease-in-out 0.5s infinite alternate;
+        }
+
+        @keyframes yayPop {
+            0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+            50% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+
+        @keyframes yayPulse {
+            0% { transform: translate(-50%, -50%) scale(1); }
+            100% { transform: translate(-50%, -50%) scale(1.1); }
+        }
     </style>
 </head>
-<body>
-    <div class="container">
-        <header>
-            <h1>📚 Vocab Test</h1>
-            <a href="../index.html" class="back-link">← Back to Projects</a>
-        </header>
-        <div class="content">
-            <p class="placeholder">Vocab Test project coming soon!</p>
+<body class="bg-gray-100 p-8">
+    <div id="nightOverlay"></div>
+    <div id="celebrationOverlay"></div>
+    <div id="yayText">YAY!</div>
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold text-center mb-8 text-gray-800">Vocabulary Matching Game</h1>
+        
+        <!-- Control buttons -->
+        <div class="flex justify-center gap-4 mb-8">
+            <button id="resetBtn" class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">
+                Reset
+            </button>
+            <button id="checkBtn" class="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">
+                Check
+            </button>
+        </div>
+
+        <!-- Game table -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <h2 class="text-xl font-bold mb-4 text-gray-800">Match Definitions & Write Sentences</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 font-semibold text-gray-700">
+                <div>Name</div>
+                <div>Definition</div>
+                <div>Your Sentence</div>
+            </div>
+            <div id="gameRows"></div>
+        </div>
+
+        <!-- Synonym matching section -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-xl font-bold mb-4 text-gray-800">Match Synonyms to Words</h2>
+            <p class="text-sm text-gray-600 mb-4">Write the vocabulary word that matches each synonym.</p>
+            <div id="synonymRows"></div>
         </div>
     </div>
+
+    <script>
+        const vocabularyData = [
+            {
+                name: "Rhyme or reason",
+                def: "Having or showing good sense, logic, or meaning",
+                synonyms: ["logical", "makes sense"]
+            },
+            {
+                name: "Dispute(s)",
+                def: "Arguments or debates over topics that people do not agree on",
+                synonyms: ["debate", "argument", "verbal fight"]
+            },
+            {
+                name: "Eat my words",
+                def: "Admit what you said was wrong",
+                synonyms: ["regret", "take back"]
+            },
+            {
+                name: "Make hay while the sun shines",
+                def: "To take advantage of an opportunity or get something done while you have the chance",
+                synonyms: ["Use your time wisely"]
+            },
+            {
+                name: "Leave no stone unturned",
+                def: "To consider every possibility when trying to solve a problem",
+                synonyms: ["searching","looking for something", "don't give up"]
+            }
+        ];
+
+        let gameState = {
+            rows: [],
+            shuffledNames: [],
+            shuffledDefs: [],
+            selectedNames: new Set(),
+            selectedDefs: new Set(),
+            synonymPairs: [] // {synonym: "pun", correctWord: "Wordplay", userAnswer: ""}
+        };
+
+        function shuffleArray(array) {
+            const shuffled = [...array];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            return shuffled;
+        }
+
+        function initializeGame() {
+            gameState.shuffledNames = shuffleArray(vocabularyData.map(item => item.name));
+            gameState.shuffledDefs = shuffleArray(vocabularyData.map(item => item.def));
+            gameState.selectedNames.clear();
+            gameState.selectedDefs.clear();
+            gameState.rows = vocabularyData.map(() => ({
+                selectedName: '',
+                selectedDef: '',
+                sentence: ''
+            }));
+
+            // Create and shuffle synonym pairs
+            const allSynonymPairs = [];
+            vocabularyData.forEach(item => {
+                item.synonyms.forEach(synonym => {
+                    allSynonymPairs.push({
+                        synonym: synonym,
+                        correctWord: item.name,
+                        userAnswer: ''
+                    });
+                });
+            });
+            gameState.synonymPairs = shuffleArray(allSynonymPairs);
+
+            renderGame();
+        }
+
+        function renderGame() {
+            renderMatchingSection();
+            renderSynonymSection();
+        }
+
+        function renderMatchingSection() {
+            const gameRowsContainer = document.getElementById('gameRows');
+            gameRowsContainer.innerHTML = '';
+
+            gameState.rows.forEach((row, index) => {
+                const rowContainer = document.createElement('div');
+                rowContainer.className = 'mb-6 p-4 border-b border-gray-200';
+                rowContainer.id = `row-${index}`;
+
+                // Dropdowns container
+                const dropdownsDiv = document.createElement('div');
+                dropdownsDiv.className = 'grid grid-cols-1 md:grid-cols-2 gap-4 mb-4';
+
+                // Name dropdown
+                const nameSelect = document.createElement('select');
+                nameSelect.className = 'w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent';
+                nameSelect.innerHTML = '<option value="">Choose one</option>';
+                
+                gameState.shuffledNames.forEach(name => {
+                    if (!gameState.selectedNames.has(name) || row.selectedName === name) {
+                        const option = document.createElement('option');
+                        option.value = name;
+                        option.textContent = name;
+                        option.selected = row.selectedName === name;
+                        nameSelect.appendChild(option);
+                    }
+                });
+
+                nameSelect.addEventListener('change', (e) => {
+                    if (row.selectedName) {
+                        gameState.selectedNames.delete(row.selectedName);
+                    }
+                    if (e.target.value) {
+                        gameState.selectedNames.add(e.target.value);
+                    }
+                    row.selectedName = e.target.value;
+                    renderGame();
+                });
+
+                // Definition dropdown
+                const defSelect = document.createElement('select');
+                defSelect.className = 'w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent';
+                defSelect.innerHTML = '<option value="">Choose one</option>';
+                
+                gameState.shuffledDefs.forEach(def => {
+                    if (!gameState.selectedDefs.has(def) || row.selectedDef === def) {
+                        const option = document.createElement('option');
+                        option.value = def;
+                        option.textContent = def;
+                        option.selected = row.selectedDef === def;
+                        defSelect.appendChild(option);
+                    }
+                });
+
+                defSelect.addEventListener('change', (e) => {
+                    if (row.selectedDef) {
+                        gameState.selectedDefs.delete(row.selectedDef);
+                    }
+                    if (e.target.value) {
+                        gameState.selectedDefs.add(e.target.value);
+                    }
+                    row.selectedDef = e.target.value;
+                    renderGame();
+                });
+
+                // Sentence input container
+                const sentenceContainer = document.createElement('div');
+                sentenceContainer.className = 'mt-3';
+                
+                const sentenceLabel = document.createElement('label');
+                sentenceLabel.className = 'block text-sm font-medium text-gray-700 mb-2';
+                sentenceLabel.textContent = 'Your sentence:';
+                
+                const sentenceInput = document.createElement('input');
+                sentenceInput.type = 'text';
+                sentenceInput.className = 'w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent';
+                sentenceInput.placeholder = 'Type your sentence here...';
+                sentenceInput.value = row.sentence;
+                sentenceInput.addEventListener('input', (e) => {
+                    row.sentence = e.target.value;
+                });
+
+                dropdownsDiv.appendChild(nameSelect);
+                dropdownsDiv.appendChild(defSelect);
+                
+                sentenceContainer.appendChild(sentenceLabel);
+                sentenceContainer.appendChild(sentenceInput);
+                
+                rowContainer.appendChild(dropdownsDiv);
+                rowContainer.appendChild(sentenceContainer);
+                gameRowsContainer.appendChild(rowContainer);
+            });
+        }
+
+        function renderSynonymSection() {
+            const synonymRowsContainer = document.getElementById('synonymRows');
+            synonymRowsContainer.innerHTML = '';
+
+            gameState.synonymPairs.forEach((pair, index) => {
+                const rowDiv = document.createElement('div');
+                rowDiv.className = 'flex items-center gap-4 mb-3 p-3 rounded-lg';
+                rowDiv.id = `synonym-row-${index}`;
+
+                const synonymLabel = document.createElement('div');
+                synonymLabel.className = 'w-48 font-medium text-gray-700';
+                synonymLabel.textContent = pair.synonym;
+
+                const inputContainer = document.createElement('div');
+                inputContainer.className = 'flex-1';
+
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent';
+                input.placeholder = 'Type the vocabulary word...';
+                input.value = pair.userAnswer;
+                input.id = `synonym-input-${index}`;
+                input.addEventListener('input', (e) => {
+                    pair.userAnswer = e.target.value;
+                });
+
+                inputContainer.appendChild(input);
+                rowDiv.appendChild(synonymLabel);
+                rowDiv.appendChild(inputContainer);
+                synonymRowsContainer.appendChild(rowDiv);
+            });
+        }
+
+        function checkAnswers() {
+            let allCorrect = true;
+            let allAnswered = true;
+
+            // Check matching section
+            gameState.rows.forEach((row, index) => {
+                const rowElement = document.getElementById(`row-${index}`);
+
+                if (row.selectedName && row.selectedDef) {
+                    const correctItem = vocabularyData.find(item => item.name === row.selectedName);
+                    const isCorrect = correctItem && correctItem.def === row.selectedDef;
+
+                    if (isCorrect) {
+                        rowElement.className = rowElement.className.replace(/bg-(red|green)-\d+/g, '') + ' bg-green-100 border-green-300';
+                    } else {
+                        rowElement.className = rowElement.className.replace(/bg-(red|green)-\d+/g, '') + ' bg-red-100 border-red-300';
+                        allCorrect = false;
+                    }
+                } else {
+                    rowElement.className = rowElement.className.replace(/bg-(red|green)-\d+/g, '');
+                    allAnswered = false;
+                }
+            });
+
+            // Check synonym section
+            gameState.synonymPairs.forEach((pair, index) => {
+                const rowElement = document.getElementById(`synonym-row-${index}`);
+                const inputElement = document.getElementById(`synonym-input-${index}`);
+
+                if (pair.userAnswer.trim()) {
+                    const isCorrect = pair.userAnswer.trim().toLowerCase() === pair.correctWord.toLowerCase();
+
+                    if (isCorrect) {
+                        rowElement.className = 'flex items-center gap-4 mb-3 p-3 rounded-lg bg-green-100';
+                        inputElement.className = 'w-full p-2 border border-green-500 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent bg-green-50';
+                    } else {
+                        rowElement.className = 'flex items-center gap-4 mb-3 p-3 rounded-lg bg-red-100';
+                        inputElement.className = 'w-full p-2 border border-red-500 rounded-md focus:ring-2 focus:ring-red-500 focus:border-transparent bg-red-50';
+                        allCorrect = false;
+                    }
+                } else {
+                    rowElement.className = 'flex items-center gap-4 mb-3 p-3 rounded-lg';
+                    inputElement.className = 'w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent';
+                    allAnswered = false;
+                }
+            });
+
+            // Trigger celebration if all correct
+            if (allAnswered && allCorrect) {
+                startCelebration();
+            }
+        }
+
+        // Celebration / Fireworks system
+        function startCelebration() {
+            const overlay = document.getElementById('celebrationOverlay');
+            const nightOverlay = document.getElementById('nightOverlay');
+            const yayText = document.getElementById('yayText');
+
+            // Create stars in the night sky
+            createStars(nightOverlay);
+
+            // Fade in night sky first
+            nightOverlay.classList.add('active');
+
+            // Wait for night sky to fade in, then start fireworks
+            setTimeout(() => {
+                overlay.classList.add('active');
+                yayText.classList.add('show');
+                startFireworks();
+            }, 1000);
+
+            const colors = ['#ff1493', '#00bfff', '#ffd700', '#ff6347', '#32cd32', '#9400d3', '#ff69b4', '#00ff7f'];
+            const catEmojis = ['🐱', '😺', '😸', '😻', '🙀', '😹', '😼', '🐈'];
+
+            function createStars(container) {
+                // Clear any existing stars
+                container.innerHTML = '';
+                const starCount = 100;
+                for (let i = 0; i < starCount; i++) {
+                    const star = document.createElement('div');
+                    star.className = 'star';
+                    const size = 1 + Math.random() * 2;
+                    star.style.width = size + 'px';
+                    star.style.height = size + 'px';
+                    star.style.left = Math.random() * 100 + '%';
+                    star.style.top = Math.random() * 60 + '%';
+                    star.style.animationDelay = Math.random() * 2 + 's';
+                    container.appendChild(star);
+                }
+            }
+
+            function startFireworks() {
+                let fireworkInterval;
+                let elapsed = 0;
+                const duration = 10000;
+
+                // Launch fireworks at intervals
+                fireworkInterval = setInterval(() => {
+                    launchFirework();
+                    elapsed += 200;
+
+                    // Launch multiple fireworks as time goes on
+                    if (elapsed > 2000 && Math.random() > 0.5) {
+                        launchFirework();
+                    }
+                    if (elapsed > 5000 && Math.random() > 0.5) {
+                        launchFirework();
+                    }
+                }, 200);
+
+                // Stop after 10 seconds
+                setTimeout(() => {
+                    clearInterval(fireworkInterval);
+                    yayText.classList.remove('show');
+
+                    // Fade out night sky
+                    nightOverlay.classList.add('fade-out');
+
+                    // Clean up after fade
+                    setTimeout(() => {
+                        overlay.classList.remove('active');
+                        overlay.innerHTML = '';
+                        nightOverlay.classList.remove('active', 'fade-out');
+                        nightOverlay.innerHTML = '';
+                    }, 1000);
+                }, duration);
+            }
+
+            function launchFirework() {
+                const x = Math.random() * window.innerWidth;
+                const startY = window.innerHeight;
+                const targetY = window.innerHeight * 0.2 + Math.random() * window.innerHeight * 0.4;
+
+                // Create the rocket trail
+                const rocket = document.createElement('div');
+                rocket.className = 'firework-particle';
+                rocket.style.left = x + 'px';
+                rocket.style.bottom = '0px';
+                rocket.style.width = '6px';
+                rocket.style.height = '6px';
+                rocket.style.background = '#fff';
+                rocket.style.boxShadow = '0 0 10px #fff, 0 0 20px #ffd700';
+                overlay.appendChild(rocket);
+
+                // Animate rocket going up
+                let rocketY = 0;
+                const rocketSpeed = 15;
+                const rocketInterval = setInterval(() => {
+                    rocketY += rocketSpeed;
+                    rocket.style.bottom = rocketY + 'px';
+
+                    if (rocketY >= startY - targetY) {
+                        clearInterval(rocketInterval);
+                        rocket.remove();
+                        explodeFirework(x, targetY);
+                    }
+                }, 16);
+            }
+
+            function explodeFirework(x, y) {
+                const particleCount = 30 + Math.floor(Math.random() * 20);
+                const color = colors[Math.floor(Math.random() * colors.length)];
+
+                for (let i = 0; i < particleCount; i++) {
+                    const isCat = Math.random() < 0.2; // 20% chance of cat
+                    const particle = document.createElement('div');
+
+                    if (isCat) {
+                        particle.className = 'cat-particle';
+                        particle.textContent = catEmojis[Math.floor(Math.random() * catEmojis.length)];
+                    } else {
+                        particle.className = 'firework-particle';
+                        const size = 4 + Math.random() * 6;
+                        particle.style.width = size + 'px';
+                        particle.style.height = size + 'px';
+                        particle.style.background = color;
+                        particle.style.boxShadow = `0 0 ${size}px ${color}`;
+                    }
+
+                    particle.style.left = x + 'px';
+                    particle.style.top = y + 'px';
+                    overlay.appendChild(particle);
+
+                    // Random angle and velocity
+                    const angle = (Math.PI * 2 * i) / particleCount + (Math.random() - 0.5) * 0.5;
+                    const velocity = 3 + Math.random() * 5;
+                    let vx = Math.cos(angle) * velocity;
+                    let vy = Math.sin(angle) * velocity;
+                    let posX = x;
+                    let posY = y;
+                    let opacity = 1;
+                    const gravity = 0.1;
+
+                    const particleInterval = setInterval(() => {
+                        vy += gravity;
+                        posX += vx;
+                        posY += vy;
+                        opacity -= 0.015;
+
+                        particle.style.left = posX + 'px';
+                        particle.style.top = posY + 'px';
+                        particle.style.opacity = opacity;
+
+                        if (opacity <= 0) {
+                            clearInterval(particleInterval);
+                            particle.remove();
+                        }
+                    }, 16);
+                }
+            }
+        }
+
+        function resetGame() {
+            document.querySelectorAll('[id^="row-"]').forEach(row => {
+                row.className = row.className.replace(/bg-(red|green)-\d+/g, '');
+            });
+            initializeGame();
+        }
+
+        // Event listeners
+        document.getElementById('resetBtn').addEventListener('click', resetGame);
+        document.getElementById('checkBtn').addEventListener('click', checkAnswers);
+
+        // Initialize the game when the page loads
+        initializeGame();
+    </script>
 </body>
 </html>
